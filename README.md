@@ -1,7 +1,8 @@
 # Simple network scanner 
 Write on python build and test on 2.7.14
 
-This is a simple network scanner, that supports multiple networks with CIDR and multipl ports.
+This is a simple network scanner, that supports multiple networks with CIDR and multiplе ports.
+Export formats: CSV, XML
 
 # Install
 
@@ -15,14 +16,14 @@ chmod +x net-scan
 ./net-scan -n 192.168.0.0/24 -p 80 --out-file /path/to/the/report.csv
 ```
 
-This will scan all hosts in 192.168.0.0/24 network for port 80 and delivire the result on the console and in the file.
+This will scan all hosts in 192.168.0.0/24 network for port 80 and display the result on the console and in the file.
 
 # Help
 
 ```
 ./net-scan -h 
 ```
-Will show all possible options of the script
+Will show all possible options of the script.
 
 ````
 usage: net-scan [-h] -n ADDR/CIDR [ADDR/CIDR ...] -p PORT [PORT ...]
