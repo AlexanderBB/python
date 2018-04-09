@@ -1,0 +1,186 @@
+#!/usr/bin/python
+
+"""
+Simple network scanner, that can export the results to CSV or XML.
+It supports multiple networks and ports at the same time.
+
+Copyright (C) 2018  Aleksandar Boyadzhiev
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+"""
+
+
+import ipaddress, socket as socket
+import argparse, sys, csv
+from contextlib import closing
+import xml.etree.cElementTree as ET
+
+def check_port(host,port):
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.settimeout(0.51)
+    with closing(s) as sock:
+        if sock.connect_ex((host, port)) == 0:
+            return "Found open port!"
+
+def main():
+    class cl:
+        """ HEADER """
+        HDR = '\033[95m'
+        """ OKBLUE """
+        KB = '\033[94m'
+        """ OKGREEN """
+        KG = '\033[92m'
+        """ WARNING """
+        W = '\033[93m'
+        """ FAIL """
+        F = '\033[91m'
+        """ BOLD """
+        B = '\033[1m'
+        """ UNDERLINE """
+        UNLN = '\033[4m'
+        """ ENDOFFORMATING """
+        EC = '\033[0m'
+
+    networks = []
+    parser = argparse.ArgumentParser(prog="net-scan", description='Scans network hosts for specific port.')
+    requiredNamed = parser.add_argument_group('required arguments')
+    requiredNamed.add_argument('-n','--network', metavar='ADDR/CIDR', type=str, nargs='+',
+            help='Network forward slash CIDR e.g. 191.168.0.0/16 Multiple networks suported, devided by space.', required=True)
+    requiredNamed.add_argument('-p','--port', metavar='PORT', nargs='+', type=int,
+            help="Enter port number for scanning. Value between 0-65535 e.g. 80 Multiple ports supported, devided by space.", required=True)
+    parser.add_argument('-of','--out-file', metavar="FILE",
+            help='Output file location, with the scan results in CSV format e.g. /path/to/some/dir/scan-results.csv '\
+            + cl.W + 'WARNING: Existing files will be overwritten!' + cl.EC)
+    parser.add_argument('-xml', action='store_const',const=True,
+            help='Write the results to XML formated file.')
+    args = parser.parse_args()
+
+    class File:
+        def __init__ (self, type, path, description, handler):
+            self.type = str(type)
+            self.path = path
+            self.description = description
+            self.handler = handler
+
+    class Network:
+        def __init__ (self, net_address, hosts, description):
+            self.net_address = net_address
+            self.hosts = hosts
+            self.description = description
+
+    class Host:
+        def __init__(self, ipaddress, ports, description):
+            self.ipaddress = ipaddress
+            self.ports = ports
+            self.description = description
+
+    for port in args.port:
+        if port < 1 or port > 65535:
+            print "\n{}This string '{}{}{}' doesn't look like a valid port.".format(cl.F,cl.B,port,cl.EC+cl.F) \
+            + " The value must be in between 1 and 65535{}\n".format(cl.F,cl.B,port,cl.EC+cl.F,cl.EC)
+            sys.exit(1)
+
+    for net in args.network:
+        try:
+            ipaddress.ip_network(u'' + net)
+        except ValueError:
+            print "\n{}This string '{}{}{}' doesn't look like a valid network.".format(cl.F,cl.B,net,cl.EC+cl.F) \
+            + "The network must be in format [1-255].[1-255].[1-255].[1-255]/[1-32]{}\n".format(cl.EC)
+            sys.exit(2)
+
+    if args.out_file is not None:
+        typeExt = args.out_file.split(".")
+        description = "Log to file: {0}ON{1}\nFile path: ".format(cl.KG+cl.B,cl.EC)
+        if args.xml is not None:
+            fileExt = ".xml"
+            if 'xml' not in typeExt:
+                description += cl.W + typeExt[0] + fileExt + " (autocorrect){}".format(cl.EC)
+            else:
+                description += cl.KG + args.out_file + cl.EC
+            path = typeExt[0] + fileExt
+            type = 'xml'
+        else:
+            fileExt = ".csv"
+            if 'csv' not in typeExt:
+                description += cl.W + typeExt[0] + fileExt + " (autocorrect){}".format(cl.EC)
+            else:
+                description += cl.KG + args.out_file + cl.EC
+            path = typeExt[0] + fileExt
+            type = 'csv'
+
+        try:
+            fh = open(path,"w")
+        except (ValueError, IOError):
+            print "\n{}IO ERROR! File '{}{}{}' cannot be oppened for write or cannot be created. Is it yours ?{}\n".format(cl.F,cl.B,path,cl.EC+cl.F,cl.EC)
+            sys.exit(3)
+
+        description += "\nFile type: {}{}{}\nFile writable: {}OK{}".format(cl.KG,type,cl.EC,cl.KG,cl.EC)
+        f = File(type,path,description,fh)
+        if f.type is "csv":
+            writer = csv.writer(f.handler, delimiter=',', quoting=csv.QUOTE_MINIMAL)
+        else:
+            writer = ET.Element("Net-Scan")
+            XMLTargets = ET.SubElement(writer, "Networks")
+
+    else:
+        description = "Log to file: {}OFF{}".format(cl.F,cl.EC)
+        writer = False
+
+    print description
+
+    for net in args.network:
+        hosts = []
+        for ipaddr in list(ipaddress.ip_network(u''+net).hosts()):
+            hosts.append(Host(ipaddr,args.port,''))
+
+        networks.append(Network(net,hosts,''))
+
+    for network in networks:
+        print "Scanning network: " + cl.B + network.net_address + cl.EC
+        if writer and f.type is "csv":
+            writer.writerow(['Scanned Network', 'Scanned Ports'])
+            writer.writerow([network.net_address, " ".join(map(str, args.port))])
+            writer.writerow(['Host IP','Open Ports'])
+
+        elif writer and f.type is "xml":
+            XMLNetwork = ET.SubElement(XMLTargets, "Network")
+            ET.SubElement(XMLNetwork,"Network-Address").text = network.net_address
+            ET.SubElement(XMLNetwork,"Scanned-Ports").text = " ".join(map(str, args.port))
+            XMLHosts = ET.SubElement(XMLNetwork, "Hosts")
+
+        for host in network.hosts:
+            openports = []
+            for port in host.ports:
+                result = check_port(str(host.ipaddress),int(port))
+                if result:
+                    openports.append(port)
+
+            if openports and writer and f.type is "csv":
+                writer.writerow([ str(host.ipaddress), ' '.join(map(str, openports)) ])
+
+            elif openports and writer and f.type is "xml":
+                XMLHost = ET.SubElement(XMLHosts,"Host")
+                ET.SubElement(XMLHost,"Host-IP").text = str(host.ipaddress)
+                ET.SubElement(XMLHost,"Open-Ports").text = ' '.join(map(str, openports))
+
+            if openports:
+                print host.ipaddress
+                print cl.KG + "Found Open ports: " + cl.B + ','.join(map(str, openports)) + cl.EC
+
+    if f.type is "xml":
+        ET.ElementTree(writer).write(f.path)
+
+if __name__ == "__main__":
+        main()
