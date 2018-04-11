@@ -1,5 +1,5 @@
 # Simple network scanner 
-Write on python build and test on 2.7.14
+Writed, build and tested on python 2.7.14
 
 This is a simple network scanner, that supports multiple networks with CIDR and multiplе ports.
 Export formats: CSV, XML
